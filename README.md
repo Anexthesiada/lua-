@@ -1,5 +1,5 @@
 # lua-
-Scripts variados
-Use somente em singleplayer. Usar mod menus/comandos no GTA Online pode resultar em ban.
+Scripts
+Use somente em singleplayer.
 
-Alguns natives podem variar por build do Stand/GTA. Teste localmente
+Alguns natives podem variar build do Stand/GTA. Teste localmente
