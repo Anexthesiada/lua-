@@ -1,0 +1,129 @@
+-- Spawner_Classicos.lua
+-- Stand (GTA V Legacy) - Modular Spawner: Clássicos
+-- Funções: spawn forçado, tunagem 100% automática, log detalhado
+-- Uso: APENAS SINGLEPLAYER / OFFLINE
+
+util.require_natives()
+
+local logfile = filesystem.scripts_dir() .. "\\classicos_log.txt"
+local function log(msg)
+    util.toast(msg)
+    print("[Classicos] " .. msg)
+    local f = io.open(logfile, "a")
+    if f then f:write("[Classicos] " .. msg .. "\n"); f:close() end
+end
+local f = io.open(logfile, "w"); if f then f:close() end
+
+local function request_model(hash)
+    STREAMING.REQUEST_MODEL(hash)
+    log("REQUEST_MODEL para hash=" .. tostring(hash))
+end
+
+local function try_create(hash, x,y,z,heading,net,scriptHost)
+    local veh = VEHICLE.CREATE_VEHICLE(hash, x,y,z,heading, net, scriptHost)
+    if veh ~= 0 then
+        log(string.format("CREATE_VEHICLE sucesso em x=%.2f y=%.2f z=%.2f | net=%s, host=%s | handle=%s",
+            x,y,z,tostring(net),tostring(scriptHost),tostring(veh)))
+        return veh
+    else
+        log(string.format("CREATE_VEHICLE falhou em x=%.2f y=%.2f z=%.2f | net=%s, host=%s",
+            x,y,z,tostring(net),tostring(scriptHost)))
+        return nil
+    end
+end
+
+local function spawn_forced(model)
+    local hash = util.joaat(model)
+    request_model(hash)
+    local ped = players.user_ped()
+    if not ped or ped == 0 then log("Ped inválido"); return end
+    local coords = ENTITY.GET_ENTITY_COORDS(ped)
+    local heading = ENTITY.GET_ENTITY_HEADING(ped)
+
+    local attempts = {
+        {dz=0.5, net=true, host=true},
+        {dz=1.0, net=true, host=true},
+        {dz=2.0, net=true, host=true},
+        {dz=0.5, net=false, host=false},
+        {dz=1.0, net=false, host=false},
+        {dz=2.0, net=false, host=false},
+    }
+
+    local veh = nil
+    for _,a in ipairs(attempts) do
+        veh = try_create(hash, coords.x+5.0, coords.y, coords.z+a.dz, heading, a.net, a.host)
+        if veh then break end
+    end
+
+    if not veh then
+        log("CREATE_VEHICLE falhou. Tentando entities.create_vehicle")
+        local pos = v3(coords.x+5.0, coords.y, coords.z+1.0)
+        local ent = entities.create_vehicle(hash, pos, heading)
+        if ent and ent ~= INVALID_GUID then
+            log("entities.create_vehicle sucesso. GUID=" .. tostring(ent))
+            veh = ent
+        else
+            log("entities.create_vehicle também falhou.")
+            return
+        end
+    end
+
+    pcall(function() PED.SET_PED_INTO_VEHICLE(ped, veh, -1) end)
+    log("Spawn concluído para model=" .. model)
+    STREAMING.SET_MODEL_AS_NO_LONGER_NEEDED(hash)
+end
+
+local function upgrade_vehicle_full()
+    local ped = players.user_ped()
+    if not PED.IS_PED_IN_ANY_VEHICLE(ped, false) then util.toast("Você não está em um veículo"); return end
+    local veh = PED.GET_VEHICLE_PED_IS_IN(ped, false)
+    pcall(function()
+        for modType=0,49 do
+            local max = VEHICLE.GET_NUM_VEHICLE_MODS(veh, modType)
+            if max > 0 then VEHICLE.SET_VEHICLE_MOD(veh, modType, max-1, false) end
+        end
+        VEHICLE.TOGGLE_VEHICLE_MOD(veh, 18, true)
+        for i=0,3 do VEHICLE.SET_VEHICLE_NEON_LIGHTS_ENABLED(veh, i, true) end
+        if VEHICLE._SET_VEHICLE_NEON_LIGHTS_COLOUR then VEHICLE._SET_VEHICLE_NEON_LIGHTS_COLOUR(veh, 0, 150, 255) end
+        VEHICLE.SET_VEHICLE_FIXED(veh)
+        VEHICLE.SET_VEHICLE_ENGINE_HEALTH(veh, 1000.0)
+    end)
+    util.toast("Tunagem 100% aplicada")
+    log("Tunagem 100% aplicada ao veículo atual")
+end
+
+local root = menu.my_root()
+local main = root:list("Spawner Clássicos", {}, "Spawn e tunagem (USO OFFLINE)")
+
+main:action("Melhorar veículo atual 100%", {}, "Aplica upgrades máximos", function()
+    upgrade_vehicle_full()
+end)
+
+-- Submenus
+local classicos = main:list("Classicos", {}, "Veículos Classicos")
+classicos:action("Spawn stinger", {}, "Spawn forçado stinger", function() spawn_forced("stinger") end)
+classicos:action("Spawn monroe", {}, "Spawn forçado monroe", function() spawn_forced("monroe") end)
+classicos:action("Spawn tornado", {}, "Spawn forçado tornado", function() spawn_forced("tornado") end)
+classicos:action("Spawn coquette3", {}, "Spawn forçado coquette3", function() spawn_forced("coquette3") end)
+classicos:action("Spawn jb700", {}, "Spawn forçado jb700", function() spawn_forced("jb700") end)
+classicos:action("Spawn ztype", {}, "Spawn forçado ztype", function() spawn_forced("ztype") end)
+classicos:action("Spawn pigalle", {}, "Spawn forçado pigalle", function() spawn_forced("pigalle") end)
+classicos:action("Spawn casco", {}, "Spawn forçado casco", function() spawn_forced("casco") end)
+classicos:action("Spawn stingergt", {}, "Spawn forçado stingergt", function() spawn_forced("stingergt") end)
+classicos:action("Spawn turismo2", {}, "Spawn forçado turismo2", function() spawn_forced("turismo2") end)
+classicos:action("Spawn btype", {}, "Spawn forçado btype", function() spawn_forced("btype") end)
+classicos:action("Spawn savestra", {}, "Spawn forçado savestra", function() spawn_forced("savestra") end)
+classicos:action("Spawn retinue", {}, "Spawn forçado retinue", function() spawn_forced("retinue") end)
+classicos:action("Spawn cheburek", {}, "Spawn forçado cheburek", function() spawn_forced("cheburek") end)
+classicos:action("Spawn cogcabrio", {}, "Spawn forçado cogcabrio", function() spawn_forced("cogcabrio") end)
+classicos:action("Spawn manana2", {}, "Spawn forçado manana2", function() spawn_forced("manana2") end)
+classicos:action("Spawn peyote3", {}, "Spawn forçado peyote3", function() spawn_forced("peyote3") end)
+classicos:action("Spawn dynasty", {}, "Spawn forçado dynasty", function() spawn_forced("dynasty") end)
+classicos:action("Spawn stafford", {}, "Spawn forçado stafford", function() spawn_forced("stafford") end)
+classicos:action("Spawn z190", {}, "Spawn forçado z190", function() spawn_forced("z190") end)
+
+
+main:action("Aviso", {}, "Use apenas em modo offline!", function()
+    util.toast("Aviso: use apenas em singleplayer/offline")
+    log("Aviso exibido ao usuário")
+end)
