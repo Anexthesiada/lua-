@@ -108,4 +108,4 @@ menu.action(root, "Remover todo o dinheiro", {}, "", function()
     log_action("Todo o dinheiro foi removido (mock).")
 end)
 
-log_action("MoneyManagerV4 carregado com sucesso!")
+log_action("MoneyManagerV1 carregado com sucesso!")
