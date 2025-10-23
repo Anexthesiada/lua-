@@ -1,4 +1,4 @@
--- DriftAssistant v3
+-- DriftAssistant v1
 -- Improved drift assistant using player steering input, progressive traction control and proportional lateral force
 -- Works with Stand Lua (singleplayer). Use at your own risk. Designed for Legacy builds.
 
