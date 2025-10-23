@@ -1,0 +1,59 @@
+-- air_suspension_native.lua
+-- Air Suspension com hotkeys (compatível Stand Ultimate)
+
+util.require_natives(1681379138)
+util.keep_running()
+
+menu.my_root():divider("Air Suspension")
+
+local current_height = 0.008
+local step = 0.001
+local min_height, max_height = 0.000, 0.020
+
+local function get_current_vehicle()
+    local ped = players.user_ped()
+    if not ped then return nil end
+    local veh = PED.GET_VEHICLE_PED_IS_IN(ped, false)
+    if veh ~= 0 then return veh end
+    return nil
+end
+
+local function apply_height(veh, h)
+    if not veh or veh == 0 then return end
+    VEHICLE.SET_VEHICLE_SUSPENSION_HEIGHT(veh, h)
+end
+
+menu.register_hotkey(0x26, function()
+    current_height = current_height + step
+    if current_height > max_height then current_height = max_height end
+    local veh = get_current_vehicle()
+    if veh then apply_height(veh, current_height); util.toast(string.format("⬆️ Altura: %.4f", current_height)) end
+end)
+
+menu.register_hotkey(0x28, function()
+    current_height = current_height - step
+    if current_height < min_height then current_height = min_height end
+    local veh = get_current_vehicle()
+    if veh then apply_height(veh, current_height); util.toast(string.format("⬇️ Altura: %.4f", current_height)) end
+end)
+
+menu.register_hotkey(0x27, function()
+    local veh = get_current_vehicle()
+    if veh then apply_height(veh, current_height); util.toast(string.format("➡️ Altura aplicada: %.4f", current_height)) end
+end)
+
+menu.my_root():slider_float("Altura da Suspensão", 0, 200, 8, 1, function(val)
+    current_height = val / 1000.0
+    local veh = get_current_vehicle()
+    if veh then apply_height(veh, current_height); util.toast(string.format("Altura ajustada: %.4f", current_height)) end
+end)
+
+menu.my_root():action("Aplicar altura atual", {}, "", function()
+    local veh = get_current_vehicle()
+    if veh then apply_height(veh, current_height); util.toast(string.format("Altura fixa em: %.4f", current_height)) else util.toast("Nenhum veículo encontrado.") end
+end)
+
+menu.my_root():toggle_loop("Manter altura aplicada", {}, "", function()
+    local veh = get_current_vehicle()
+    if veh then apply_height(veh, current_height) end
+end)
