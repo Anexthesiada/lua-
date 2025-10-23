@@ -1,0 +1,13 @@
+-- test_stand.lua
+-- Script mínimo para checar se o Stand está carregando scripts Lua
+local ok, err = pcall(function()
+    menu.add_feature("TESTE: Lua carregou (clique)","action",0,function()
+        util.toast("TESTE OK: Lua carregou e menu funcional")
+        return HANDLER_POP
+    end)
+    util.toast("TESTE: script carregado com sucesso")
+end)
+if not ok then
+    if util and util.toast then util.toast("Erro ao carregar test_stand.lua: " .. tostring(err))
+    else print("Erro ao carregar test_stand.lua: " .. tostring(err)) end
+end
