@@ -1,0 +1,26 @@
+-- diagnostic.lua
+-- Script diagnóstico que verifica globals e gera toasts/menus para debugar
+local function notify(s)
+    if util and util.toast then
+        util.toast(s)
+    else
+        print(s)
+    end
+end
+
+local ok, err = pcall(function()
+    notify("DIAGNOSTIC: iniciando checks...")
+    notify("Globals: menu=" .. tostring(menu ~= nil) .. " util=" .. tostring(util ~= nil) .. " players=" .. tostring(players ~= nil))
+    local user_ok, user_res = pcall(function() return tostring(players.user and players.user() or 'N/A') end)
+    notify("players.user(): " .. (user_ok and user_res or "erro"))
+    local ped_ok, ped_res = pcall(function() return tostring(players.user_ped and players.user_ped() or 'N/A') end)
+    notify("players.user_ped(): " .. (ped_ok and ped_res or "erro"))
+
+    notify("Tentando criar uma feature de menu (aperte para confirmar)...")
+    menu.add_feature("DIAGNOSTIC: botão (clique)","action",0,function()
+        notify("DIAGNOSTIC: menu action OK")
+        return HANDLER_POP
+    end)
+end)
+
+if not ok then notify("DIAGNOSTIC ERROR: " .. tostring(err)) end
