@@ -1,1 +1,31 @@
+-- air_suspension_lsc.lua
+-- Versão usando SET_VEHICLE_MOD (igual LS Customs) para rebaixar veículos
+
+util.require_natives(1681379138)
+util.keep_running()
+
+menu.my_root():divider("Air Suspension (LSC)")
+
+local levels = {
+    {name="Original (0)", id=0},
+    {name="Baixo (1)", id=1},
+    {name="Mais Baixo (2)", id=2},
+    {name="Extremo (3)", id=3},
+}
+
+local function apply_suspension_mod(level)
+    local veh = entities.get_user_vehicle_as_handle()
+    if veh ~= 0 then
+        if not VEHICLE.GET_VEHICLE_MOD_KIT(veh) then VEHICLE.SET_VEHICLE_MOD_KIT(veh, 0) end
+        VEHICLE.SET_VEHICLE_MOD(veh, 15, level, false)
+        util.toast("Suspensão ajustada para nível: " .. tostring(level))
+    else util.toast("Nenhum veículo encontrado.") end
+end
+
+for _, l in ipairs(levels) do
+    menu.my_root():action(l.name, {}, "Aplica nível " .. l.id .. " de suspensão", function() apply_suspension_mod(l.id) end)
+end
+
+local current = 0
+menu.my_root():action("Próximo Nível de Suspensão", {}, "", function() current = (current + 1) % 4; apply_suspension_mod(current) end)
 
