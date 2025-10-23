@@ -1,0 +1,67 @@
+-- graphics_reducer.lua
+-- Reduz densidade de peds/veículos/partículas e algumas cargas gráficas (Stand Lua)
+-- Agora com toggle geral de ativar/desativar, sem bloquear sessão.
+
+util.require_natives(1681379138)
+
+menu.my_root():divider("Graphics & Density Reducer")
+
+local ped_mul = 0.5
+local scenario_ped_mul = 0.5
+local vehicle_mul = 0.5
+local random_vehicle_mul = 0.5
+local parked_vehicle_mul = 0.5
+local particle_clear_radius = 50.0
+
+local reducer_enabled = false
+local clear_particles_on_apply = false
+
+local function toast(msg) util.toast(msg) end
+
+local function apply_density_this_frame()
+    local ok, err = pcall(function()
+        PED.SET_PED_DENSITY_MULTIPLIER_THIS_FRAME(ped_mul)
+        PED.SET_SCENARIO_PED_DENSITY_MULTIPLIER_THIS_FRAME(scenario_ped_mul)
+        VEHICLE.SET_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(vehicle_mul)
+        VEHICLE.SET_RANDOM_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(random_vehicle_mul)
+        VEHICLE.SET_PARKED_VEHICLE_DENSITY_MULTIPLIER_THIS_FRAME(parked_vehicle_mul)
+    end)
+    if not ok then util.toast("Erro ao aplicar density natives: " .. tostring(err)) end
+end
+
+local function clear_particles_around_player(radius)
+    local ok, err = pcall(function()
+        local ped = players.user_ped()
+        if not ped then return end
+        local pos = ENTITY.GET_ENTITY_COORDS(ped, true)
+        if GRAPHICS.REMOVE_PARTICLE_FX_IN_RANGE then GRAPHICS.REMOVE_PARTICLE_FX_IN_RANGE(pos.x, pos.y, pos.z, radius) end
+    end)
+    if not ok then util.toast("Não foi possível limpar partículas: " .. tostring(err)) end
+end
+
+menu.my_root():toggle("Ativar Graphics Reducer", {}, "Liga/desliga redução de densidade", function(on)
+    reducer_enabled = on
+    if on then toast("Graphics Reducer ATIVADO") else toast("Graphics Reducer DESATIVADO") end
+end)
+
+menu.my_root():slider_float("Ped Density (0-100)", 0, 100, math.floor(ped_mul * 100), 1, function(val) ped_mul = val / 100.0 end)
+menu.my_root():slider_float("Scenario Ped Density (0-100)", 0, 100, math.floor(scenario_ped_mul * 100), 1, function(val) scenario_ped_mul = val / 100.0 end)
+menu.my_root():slider_float("Vehicle Density (0-100)", 0, 100, math.floor(vehicle_mul * 100), 1, function(val) vehicle_mul = val / 100.0 end)
+menu.my_root():slider_float("Random Vehicle Density (0-100)", 0, 100, math.floor(random_vehicle_mul * 100), 1, function(val) random_vehicle_mul = val / 100.0 end)
+menu.my_root():slider_float("Parked Vehicle Density (0-100)", 0, 100, math.floor(parked_vehicle_mul * 100), 1, function(val) parked_vehicle_mul = val / 100.0 end)
+menu.my_root():slider_float("Particle Clear Radius (m)", 10, 200, particle_clear_radius, 1, function(val) particle_clear_radius = val end)
+menu.my_root():toggle("Clear particles on apply", {}, "Tenta limpar partículas quando aplicar", function(on) clear_particles_on_apply = on; return HANDLER_CONTINUE end)
+menu.my_root():action("Modo Lite (presets baixos)", {}, "Aplica valores mínimos automaticamente", function()
+    ped_mul = 0.15; scenario_ped_mul = 0.10; vehicle_mul = 0.10; random_vehicle_mul = 0.05; parked_vehicle_mul = 0.05; toast("Modo Lite aplicado.")
+end)
+menu.my_root():toggle("Manter ativo (loop)", {}, "Reaplica cada frame enquanto ativado", function(on) reducer_enabled = on; if on then toast("Loop ativado.") else toast("Loop desativado.") end; return HANDLER_CONTINUE end)
+
+util.create_tick_handler(function()
+    if reducer_enabled then
+        apply_density_this_frame()
+        if clear_particles_on_apply then clear_particles_around_player(particle_clear_radius) end
+    end
+    return true
+end)
+
+toast("Graphics & Density Reducer v2 carregado ✅")
