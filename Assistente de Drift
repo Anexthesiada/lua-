@@ -1,0 +1,127 @@
+-- DriftAssistant v3
+-- Improved drift assistant using player steering input, progressive traction control and proportional lateral force
+-- Works with Stand Lua (singleplayer). Use at your own risk. Designed for Legacy builds.
+
+util.require_natives()
+
+local SCRIPTS_DIR = filesystem.scripts_dir()
+local LOG_PATH = SCRIPTS_DIR .. "\\drift_assistant_v3_log.txt"
+
+-- Settings (exposed in menu)
+local enabled = false
+local steer_threshold = 18            -- minimum steering input to consider (0-255 control value)
+local min_speed_mps = 8.0            -- minimum speed (m/s) to allow drift (~28.8 km/h)
+local max_speed_mps = 33.0           -- maximum speed (m/s) to allow drift (~118.8 km/h)
+local max_power_mult = 3.5           -- engine power multiplier while drifting (not extreme)
+local max_torque_mult = 1.6          -- torque multiplier while drifting
+local lateral_force_scale = 0.55     -- scale of lateral force applied to vehicle
+local smooth_restore = true          -- smoothly restore handling when not drifting
+local debug_log = false
+
+local function ts() return os.date("%Y-%m-%d %H:%M:%S") end
+local function log(msg)
+    local line = string.format("[%s] %s", ts(), tostring(msg))
+    pcall(function()
+        local f = io.open(LOG_PATH, "a")
+        if f then f:write(line.."\n"); f:close() end
+    end)
+    if debug_log then
+        pcall(function() util.toast(line) end)
+    end
+end
+
+-- Menu
+local root = menu.my_root()
+menu.toggle(root, "Assistente de Drift v3", {"driftassistv3"}, "Ativa/Desativa o Drift Assistant v3", function(state)
+    enabled = state
+    if state then
+        util.toast("Drift Assistant v3: ON")
+        log("Drift Assistant enabled")
+    else
+        util.toast("Drift Assistant v3: OFF")
+        log("Drift Assistant disabled")
+    end
+end, enabled)
+
+menu.slider(root, "Steer threshold (0-60)", {"drift_steer_thr"}, "Quanto mais alto, mais precisa a volta para iniciar drift", 0, 60, steer_threshold, 1, function(val) steer_threshold = val end)
+menu.slider(root, "Min speed km/h", {"drift_min_kmh"}, "Velocidade mínima para drift (km/h)", 10, 200, math.floor(min_speed_mps*3.6), 1, function(val) min_speed_mps = val/3.6 end)
+menu.slider(root, "Max speed km/h", {"drift_max_kmh"}, "Velocidade máxima para drift (km/h)", 40, 300, math.floor(max_speed_mps*3.6), 1, function(val) max_speed_mps = val/3.6 end)
+menu.slider(root, "Power multiplier (1.0-6.0)", {"drift_power"}, "Multiplica potência do motor durante drift", 10, 60, math.floor(max_power_mult*10), 1, function(val) max_power_mult = val/10.0 end)
+menu.slider(root, "Torque multiplier (10-30)", {"drift_torque"}, "Multiplica torque do motor durante drift", 10, 30, math.floor(max_torque_mult*10), 1, function(val) max_torque_mult = val/10.0 end)
+menu.slider(root, "Lateral force scale (0-100)", {"drift_lat_scale"}, "Força lateral aplicada para manter drift", 0, 100, math.floor(lateral_force_scale*100), 1, function(val) lateral_force_scale = val/100.0 end)
+menu.toggle(root, "Debug log to toast", {"drift_debug"}, "Mostra toasts com informações de debug", function(s) debug_log = s end, debug_log)
+
+-- Helper: read steering control (returns -1..1)
+local function get_steer_norm()
+    local ok, val = pcall(function() return PAD.GET_CONTROL_VALUE(0, 59) end)
+    if not ok or val == nil then
+        -- fallback to GET_CONTROL_NORMAL if available
+        local ok2, v2 = pcall(function() return PAD.GET_CONTROL_NORMAL(0, 59) end)
+        if ok2 and v2 then
+            -- GET_CONTROL_NORMAL returns -1..1 typical, convert to -128..128
+            return v2
+        end
+        return 0
+    end
+    -- PAD.GET_CONTROL_VALUE returns 0..255, center ~128
+    local n = (val - 128) / 128.0
+    return n -- -1..1
+end
+
+-- Apply gradual handling changes (tries to be smooth)
+local function apply_drift_handling(veh, active, steer_norm, speed)
+    if active then
+        -- Reduce grip and gently increase power/torque
+        pcall(function() VEHICLE.SET_VEHICLE_REDUCE_GRIP(veh, true) end)
+        -- Progressive multipliers based on steering intensity
+        local intensity = math.min(1.0, math.abs(steer_norm) * 1.2)
+        local power = 1.0 + (max_power_mult - 1.0) * intensity
+        local torque = 1.0 + (max_torque_mult - 1.0) * intensity
+        pcall(function() VEHICLE.SET_VEHICLE_ENGINE_POWER_MULTIPLIER(veh, power) end)
+        pcall(function() VEHICLE.SET_VEHICLE_ENGINE_TORQUE_MULTIPLIER(veh, torque) end)
+        -- lateral force proportional to steering and speed
+        local dir = steer_norm >= 0 and 1 or -1
+        local speed_factor = math.min(1.0, speed / max_speed_mps)
+        local lateral = lateral_force_scale * intensity * speed_factor
+        -- apply force in vehicle local X axis (sideways). Using small upward offset to help rotation.
+        pcall(function() APPLY_FORCE_TO_ENTITY(veh, 1, dir * lateral, 0.0, 0.0, 0.0, 0.0, 0.5, 0, false, true, true, false, true) end)
+        if debug_log then log(string.format("Drift active: steer=%.2f speed=%.2f power=%.2f torque=%.2f lateral=%.3f", steer_norm, speed, power, torque, lateral)) end
+    else
+        -- restore to near-normal handling
+        if smooth_restore then
+            pcall(function() VEHICLE.SET_VEHICLE_REDUCE_GRIP(veh, false) end)
+            pcall(function() VEHICLE.SET_VEHICLE_ENGINE_POWER_MULTIPLIER(veh, 1.0) end)
+            pcall(function() VEHICLE.SET_VEHICLE_ENGINE_TORQUE_MULTIPLIER(veh, 1.0) end)
+        else
+            pcall(function() VEHICLE.SET_VEHICLE_REDUCE_GRIP(veh, false) end)
+            pcall(function() VEHICLE.SET_VEHICLE_ENGINE_POWER_MULTIPLIER(veh, 1.0) end)
+            pcall(function() VEHICLE.SET_VEHICLE_ENGINE_TORQUE_MULTIPLIER(veh, 1.0) end)
+        end
+    end
+end
+
+-- Main loop: check player inputs and vehicle state
+util.create_thread(function()
+    while true do
+        if enabled then
+            local ped = players.user_ped()
+            if PED.IS_PED_IN_ANY_VEHICLE(ped, false) then
+                local veh = PED.GET_VEHICLE_PED_IS_IN(ped, false)
+                if veh ~= 0 and ENTITY.DOES_ENTITY_EXIST(veh) then
+                    -- steering normalized
+                    local steer = get_steer_norm() -- -1..1
+                    local abs_steer = math.abs(steer * 128) -- map to ~0..128 scale for threshold compare
+                    local speed = ENTITY.GET_ENTITY_SPEED(veh) -- m/s
+                    -- decide active drift condition
+                    local steer_cond = abs_steer >= steer_threshold
+                    local speed_cond = speed >= min_speed_mps and speed <= max_speed_mps
+                    local active = steer_cond and speed_cond
+                    apply_drift_handling(veh, active, steer, speed)
+                end
+            end
+        end
+        util.yield(0)
+    end
+end)
+
+log("Drift Assistant v3 loaded. Use the menu to tune settings. Good luck and adjust sliders to your taste.")
