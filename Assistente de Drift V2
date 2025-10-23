@@ -1,0 +1,84 @@
+-- DriftAssistant v2
+-- Assistente de Drift com modos: Leve / Normal / Agressivo
+-- Totalmente em português, com log automático
+
+util.require_natives()
+
+local SCRIPTS_DIR = filesystem.scripts_dir()
+local LOG_PATH = SCRIPTS_DIR .. "\\drift_assistant_v4_log.txt"
+
+-- Configurações iniciais
+local ativo = false
+local modo = "Normal"
+
+local modos_cfg = {
+    ["Leve"] = {power=1.5, torque=1.2, grip=0.85, lat=0.25},
+    ["Normal"] = {power=2.0, torque=1.4, grip=0.7, lat=0.40},
+    ["Agressivo"] = {power=2.8, torque=1.8, grip=0.55, lat=0.60}
+}
+
+-- Funções auxiliares
+local function ts() return os.date("%Y-%m-%d %H:%M:%S") end
+local function log(msg)
+    local line = string.format("[%s] %s", ts(), tostring(msg))
+    pcall(function()
+        local f = io.open(LOG_PATH, "a")
+        if f then f:write(line.."\n"); f:close() end
+    end)
+end
+
+-- Menu
+local root = menu.my_root()
+
+menu.toggle(root, "Assistente de Drift v4", {"driftassistv4"}, "Ativa ou desativa o Assistente de Drift", function(s)
+    ativo = s
+    if ativo then
+        util.toast("Assistente de Drift v4: LIGADO ("..modo..")")
+        log("Assistente de Drift ativado no modo "..modo)
+    else
+        util.toast("Assistente de Drift v4: DESLIGADO")
+        log("Assistente de Drift desativado")
+    end
+end, ativo)
+
+menu.list_select(root, "Modo de Drift", {"driftmodov4"}, "Escolha o modo de drift", {"Leve", "Normal", "Agressivo"}, 2, function(sel)
+    modo = sel
+    util.toast("Modo de Drift alterado para: "..modo)
+    log("Modo de Drift alterado para "..modo)
+end)
+
+-- Função principal
+local function aplicar_drift(veh, config, steer, speed)
+    -- grip progressivo
+    VEHICLE.SET_VEHICLE_REDUCE_GRIP(veh, true)
+    VEHICLE.SET_VEHICLE_GRAVITY(veh, true)
+    -- multiplicadores
+    VEHICLE.SET_VEHICLE_ENGINE_POWER_MULTIPLIER(veh, config.power)
+    VEHICLE.SET_VEHICLE_ENGINE_TORQUE_MULTIPLIER(veh, config.torque)
+    -- força lateral proporcional
+    local intensidade = math.min(1.0, math.abs(steer))
+    local lateral = config.lat * intensidade
+    local dir = steer >= 0 and 1 or -1
+    APPLY_FORCE_TO_ENTITY(veh, 1, dir * lateral, 0.0, 0.0, 0.0, 0.0, 0.5, 0, false, true, true, false, true)
+    log(string.format("Drift: modo=%s vel=%.1f km/h steer=%.2f", modo, speed*3.6, steer))
+end
+
+-- Loop principal
+util.create_thread(function()
+    while true do
+        if ativo then
+            local ped = players.user_ped()
+            if PED.IS_PED_IN_ANY_VEHICLE(ped, false) then
+                local veh = PED.GET_VEHICLE_PED_IS_IN(ped, false)
+                if veh ~= 0 and ENTITY.DOES_ENTITY_EXIST(veh) then
+                    local steer = (PAD.GET_CONTROL_VALUE(0, 59) - 128) / 128.0 -- -1..1
+                    local speed = ENTITY.GET_ENTITY_SPEED(veh)
+                    aplicar_drift(veh, modos_cfg[modo], steer, speed)
+                end
+            end
+        end
+        util.yield(0)
+    end
+end)
+
+log("Assistente de Drift v2 carregado com sucesso.")
