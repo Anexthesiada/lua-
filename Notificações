@@ -1,0 +1,34 @@
+-- notification_logger.lua
+-- Script para registrar notificações/toasts em um log
+
+util.require_natives(1681379138)
+util.keep_running()
+
+local log_dir = filesystem.scripts_dir() .. "logs/"
+local log_path = log_dir .. "notifications_log.txt"
+
+-- cria pasta se não existir
+pcall(function() filesystem.create_dir(log_dir) end)
+
+local function log_message(msg)
+    local ok, err = pcall(function()
+        local file = io.open(log_path, "a")
+        if file then
+            local line = os.date("[%Y-%m-%d %H:%M:%S] ") .. msg .. "\n"
+            file:write(line)
+            file:close()
+        end
+    end)
+    if not ok then util.toast("Erro ao gravar log: " .. tostring(err)) end
+end
+
+local function log_toast(msg)
+    util.toast(msg)
+    log_message(msg)
+end
+
+menu.my_root():action("Teste Log Notification", {}, "Gera toast e grava no log", function()
+    log_toast("Notificação de teste gravada no log!")
+end)
+
+util.toast("Notification Logger iniciado \nLog: " .. log_path)
