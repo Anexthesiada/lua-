@@ -1,0 +1,129 @@
+-- Spawner_OffroadMotos.lua (Revisado)
+-- Stand (GTA V Legacy) - Modular Spawner: Offroad + Motos
+-- Melhorias: espera modelo carregar, mais tentativas de spawn, logs detalhados, tunagem 100% automática
+
+util.require_natives()
+
+local logfile = filesystem.scripts_dir() .. "\\offroadmotos_log.txt"
+local function log(msg)
+    util.toast(msg)
+    print("[OffroadMotos] " .. msg)
+    local f = io.open(logfile, "a")
+    if f then f:write("[OffroadMotos] " .. msg .. "\n"); f:close() end
+end
+local f = io.open(logfile, "w"); if f then f:close() end
+
+-- Funções auxiliares
+local function request_model(hash)
+    STREAMING.REQUEST_MODEL(hash)
+    log("REQUEST_MODEL chamado para hash=" .. tostring(hash))
+    local tries = 0
+    while not STREAMING.HAS_MODEL_LOADED(hash) and tries < 100 do
+        util.yield(50)
+        tries = tries + 1
+        if tries % 10 == 0 then log("Aguardando modelo carregar... tentativa " .. tostring(tries)) end
+    end
+    if STREAMING.HAS_MODEL_LOADED(hash) then
+        log("Modelo carregado com sucesso: hash=" .. tostring(hash))
+        return true
+    else
+        log("Falha: modelo não carregou a tempo.")
+        return false
+    end
+end
+
+local function try_create(hash, x,y,z,heading,net,scriptHost)
+    local veh = VEHICLE.CREATE_VEHICLE(hash, x,y,z,heading, net, scriptHost)
+    if veh ~= 0 then
+        log(string.format("CREATE_VEHICLE sucesso em x=%.2f y=%.2f z=%.2f | net=%s, host=%s | handle=%s",
+            x,y,z,tostring(net),tostring(scriptHost),tostring(veh)))
+        return veh
+    else
+        log(string.format("CREATE_VEHICLE falhou em x=%.2f y=%.2f z=%.2f | net=%s, host=%s",
+            x,y,z,tostring(net),tostring(scriptHost)))
+        return nil
+    end
+end
+
+local function spawn_forced(model)
+    local hash = util.joaat(model)
+    if not request_model(hash) then return end
+
+    local ped = players.user_ped()
+    if not ped or ped == 0 then log("Ped inválido"); return end
+    local coords = ENTITY.GET_ENTITY_COORDS(ped)
+    local heading = ENTITY.GET_ENTITY_HEADING(ped)
+
+    local veh = nil
+    for dz=0.5, 5.0, 0.5 do
+        veh = try_create(hash, coords.x+5.0, coords.y, coords.z+dz, heading, true, true)
+        if veh then break end
+        veh = try_create(hash, coords.x+5.0, coords.y, coords.z+dz, heading, false, false)
+        if veh then break end
+    end
+
+    if not veh then
+        log("Todas tentativas de CREATE_VEHICLE falharam. Tentando entities.create_vehicle")
+        local pos = v3(coords.x+5.0, coords.y, coords.z+1.0)
+        local ent = entities.create_vehicle(hash, pos, heading)
+        if ent and ent ~= INVALID_GUID then
+            log("entities.create_vehicle sucesso. GUID=" .. tostring(ent))
+            veh = ent
+        else
+            log("entities.create_vehicle também falhou.")
+            return
+        end
+    end
+
+    pcall(function() PED.SET_PED_INTO_VEHICLE(ped, veh, -1) end)
+    log("Spawn concluído para model=" .. model)
+    STREAMING.SET_MODEL_AS_NO_LONGER_NEEDED(hash)
+
+    -- Tunagem automática
+    local function upgrade_vehicle_full(v)
+        pcall(function()
+            for modType=0,49 do
+                local max = VEHICLE.GET_NUM_VEHICLE_MODS(v, modType)
+                if max > 0 then VEHICLE.SET_VEHICLE_MOD(v, modType, max-1, false) end
+            end
+            VEHICLE.TOGGLE_VEHICLE_MOD(v, 18, true)
+            for i=0,3 do VEHICLE.SET_VEHICLE_NEON_LIGHTS_ENABLED(v, i, true) end
+            if VEHICLE._SET_VEHICLE_NEON_LIGHTS_COLOUR then VEHICLE._SET_VEHICLE_NEON_LIGHTS_COLOUR(v, 0, 150, 255) end
+            VEHICLE.SET_VEHICLE_FIXED(v)
+            VEHICLE.SET_VEHICLE_ENGINE_HEALTH(v, 1000.0)
+        end)
+        util.toast("Tunagem 100% aplicada automaticamente")
+        log("Tunagem 100% aplicada ao veículo spawnado")
+    end
+
+    upgrade_vehicle_full(veh)
+end
+
+-- ===================== MENU =====================
+local root = menu.my_root()
+local main = root:list("Spawner Offroad+Motos (Revisado)", {}, "Spawn com espera de modelo e tunagem automática")
+
+-- Submenu Offroad
+local offroad = main:list("Offroad", {}, "Veículos Offroad")
+local offroad_list = {
+    "sandking","sandking2","dubsta6x6","bifta","rebel","rancherxl","brawler","mesa3","dune","dune2",
+    "barrage","blazer","blazer4","monster","guardian","technical","winky","caracara","caracara2","everon"
+}
+for _,model in ipairs(offroad_list) do
+    offroad:action("Spawn " .. model, {}, "Spawn forçado " .. model, function() spawn_forced(model) end)
+end
+
+-- Submenu Motos
+local motos = main:list("Motos", {}, "Veículos Motos")
+local moto_list = {
+    "bati","bati2","akuma","double","sanchez","sanchez2","ruffian","pcj","carbonrs","hexer","shotaro",
+    "avarus","daemon","zombiea","zombieb","hakuchou","vader","manchez","thrust","faggio"
+}
+for _,model in ipairs(moto_list) do
+    motos:action("Spawn " .. model, {}, "Spawn forçado " .. model, function() spawn_forced(model) end)
+end
+
+main:action("Aviso", {}, "Use apenas em modo offline!", function()
+    util.toast("Aviso: use apenas em singleplayer/offline")
+    log("Aviso exibido ao usuário")
+end)
