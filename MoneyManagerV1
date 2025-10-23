@@ -1,0 +1,111 @@
+-- MoneyManagerV1.lua
+-- Script de dinheiro para modo história (offline)
+-- Sem Hard-lock
+
+local log_file = filesystem.scripts_dir() .. "money_log.txt"
+
+-- Função para gravar logs
+local function log_action(text)
+    local f = io.open(log_file, "a")
+    if f then
+        f:write(os.date("[%d/%m/%Y %H:%M:%S] ") .. text .. "\n")
+        f:close()
+    end
+    util.toast(text, TOAST_ABOVE_MAP)
+end
+
+-- Função auxiliar para adicionar dinheiro
+local function add_money(amount)
+    local player = players.user_ped()
+    local hash = util.joaat("prop_cash_pile_01") -- pilha de notas
+    local pos = ENTITY.GET_ENTITY_COORDS(player)
+    local obj = entities.create_object(hash, pos)
+    if obj ~= 0 then
+        ENTITY.SET_ENTITY_VISIBLE(obj, false, 0) -- invisível
+        log_action("Adicionado $" .. amount)
+        -- Aqui você ajusta conforme o método de aplicar o dinheiro no SP
+        -- Exemplo simples: apenas mensagem de teste
+    else
+        log_action("Falha ao spawnar objeto de dinheiro")
+    end
+end
+
+-- Função auxiliar para spawnar itens de dinheiro
+local function spawn_money_object(model, label)
+    local player = players.user_ped()
+    local pos = ENTITY.GET_ENTITY_COORDS(player)
+    local hash = util.joaat(model)
+    local obj = entities.create_object(hash, pos)
+    if obj ~= 0 then
+        log_action("Spawnado: " .. label)
+    else
+        log_action("Falha ao spawnar: " .. label)
+    end
+end
+
+-- Cria submenu principal
+local root = menu.my_root()
+
+-- Valores fixos
+menu.action(root, "Adicionar $1.000", {}, "", function()
+    add_money(1000)
+end)
+
+menu.action(root, "Adicionar $10.000", {}, "", function()
+    add_money(10000)
+end)
+
+menu.action(root, "Adicionar $100.000", {}, "", function()
+    add_money(100000)
+end)
+
+-- Valor customizado
+menu.action(root, "Adicionar valor customizado", {}, "Digite no teclado", function()
+    local input = util.prompt("Digite o valor desejado:", "", 10)
+    local value = tonumber(input)
+    if value then
+        add_money(value)
+    else
+        log_action("Valor inválido.")
+    end
+end)
+
+-- Spawn de objetos
+local spawn_list = menu.list(root, "Spawn de dinheiro", {}, "")
+
+menu.action(spawn_list, "Mala de dinheiro", {}, "", function()
+    spawn_money_object("prop_money_bag_01", "Mala de dinheiro")
+end)
+
+menu.action(spawn_list, "Saco de notas", {}, "", function()
+    spawn_money_object("prop_money_bag_02", "Saco de notas")
+end)
+
+menu.action(spawn_list, "Caixa de dinheiro", {}, "", function()
+    spawn_money_object("prop_cash_crate_01", "Caixa de dinheiro")
+end)
+
+-- Loop infinito
+local loop_toggle = false
+menu.toggle(root, "Loop infinito de dinheiro", {}, "Ativa/Desativa loop", function(on)
+    loop_toggle = on
+    if on then
+        util.create_thread(function()
+            while loop_toggle do
+                add_money(5000)
+                util.yield(1000) -- a cada 1s
+            end
+        end)
+        log_action("Loop infinito de dinheiro ATIVADO")
+    else
+        log_action("Loop infinito de dinheiro DESATIVADO")
+    end
+end)
+
+-- Remover dinheiro (zerar)
+menu.action(root, "Remover todo o dinheiro", {}, "", function()
+    -- Aqui você pode setar para 0, ajustando o método de SP
+    log_action("Todo o dinheiro foi removido (mock).")
+end)
+
+log_action("MoneyManagerV4 carregado com sucesso!")
