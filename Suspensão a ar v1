@@ -1,0 +1,75 @@
+-- air_suspension_robust.lua
+-- Versão robusta do Air Suspension (proteções pcall e ações diretas)
+
+local ok, err = pcall(function()
+
+    util.require_natives(1681379138)
+    util.keep_running()
+
+    menu.my_root():divider("Air Suspension (Robusto)")
+
+    local current_height = 0.008
+    local step = 0.001
+    local min_height, max_height = 0.000, 0.020
+    local maintain_enabled = false
+
+    local presets = {
+        {name="Andar (0.004)", h=0.004},
+        {name="Baixo (0.010)", h=0.010},
+        {name="Extremo (0.016)", h=0.016},
+    }
+    local custom_preset = {name="Personalizado", h=0.008}
+
+    local function get_current_vehicle()
+        local success, veh = pcall(function() return entities.get_user_vehicle_as_handle() end)
+        if success and veh ~= nil and veh ~= 0 then return veh end
+        return nil
+    end
+
+    local function apply_height(veh, h)
+        if not veh or veh == 0 then return end
+        local ok2, e2 = pcall(function()
+            VEHICLE.SET_VEHICLE_SUSPENSION_HEIGHT(veh, h)
+            if VEHICLE.SET_VEHICLE_SUSPENSION_FORCE_MULTIPLIER then VEHICLE.SET_VEHICLE_SUSPENSION_FORCE_MULTIPLIER(veh, 1.5) end
+            if VEHICLE.SET_VEHICLE_SUSPENSION_BOUNDS then VEHICLE.SET_VEHICLE_SUSPENSION_BOUNDS(veh, -0.2, 0.2) end
+            if VEHICLE.SET_VEHICLE_SUSPENSION_COMPRESSED then VEHICLE.SET_VEHICLE_SUSPENSION_COMPRESSED(veh, 0.01) end
+            if VEHICLE.SET_VEHICLE_CENTRE_OF_MASS then VEHICLE.SET_VEHICLE_CENTRE_OF_MASS(veh, 0.0, 0.0, -0.05) end
+        end)
+        if not ok2 then util.toast("Erro ao aplicar native: " .. tostring(e2)) end
+    end
+
+    menu.my_root():action("Aplicar altura atual (Robusto)", {}, "Aplica current_height ao veículo", function()
+        local veh = get_current_vehicle()
+        if veh then apply_height(veh, current_height); util.toast("Altura aplicada: " .. string.format("%.4f", current_height)) else util.toast("Nenhum veículo encontrado.") end
+    end)
+
+    menu.my_root():action("Iniciar manter altura", {}, "Começa a reaplicar a altura periodicamente", function() maintain_enabled = true; util.toast("Loop de manutenção ativado.") end)
+    menu.my_root():action("Parar manter altura", {}, "Para a reaplicação automática", function() maintain_enabled = false; util.toast("Loop de manutenção desativado.") end)
+
+    for _, p in ipairs(presets) do
+        menu.my_root():action(p.name, {}, "", function() current_height = p.h; local v = get_current_vehicle(); if v then apply_height(v, current_height); util.toast("Preset aplicado: " .. p.name) else util.toast("Nenhum veículo encontrado.") end end)
+    end
+
+    menu.my_root():action("Aplicar Preset Personalizado", {}, "", function() local v = get_current_vehicle(); if v then apply_height(v, custom_preset.h); util.toast("Preset personalizado aplicado: " .. string.format("%.4f", custom_preset.h)) else util.toast("Nenhum veículo encontrado.") end end)
+    menu.my_root():action("Salvar Altura Atual como Preset", {}, "", function() custom_preset.h = current_height; util.toast("Preset personalizado salvo: " .. string.format("%.4f", custom_preset.h)) end)
+
+    menu.my_root():slider_float("Altura da Suspensão (Robusto)", 0, 200, 8, 1, function(val) current_height = val / 1000.0; util.toast("Altura ajustada para: " .. string.format("%.4f", current_height)) end)
+
+    local hk_ok, hk_err = pcall(function()
+        menu.register_hotkey(0x26, function() current_height = math.min(current_height + step, max_height); local v = get_current_vehicle(); if v then apply_height(v, current_height) end; util.toast("⬆️ Altura: " .. string.format("%.4f", current_height)) end)
+        menu.register_hotkey(0x28, function() current_height = math.max(current_height - step, min_height); local v = get_current_vehicle(); if v then apply_height(v, current_height) end; util.toast("⬇️ Altura: " .. string.format("%.4f", current_height)) end)
+        menu.register_hotkey(0x27, function() local v = get_current_vehicle(); if v then apply_height(v, current_height) end; util.toast("➡️ Altura aplicada: " .. string.format("%.4f", current_height)) end)
+    end)
+    if not hk_ok then util.toast("Aviso: hotkeys não puderam ser registradas: " .. tostring(hk_err)) end
+
+    util.create_tick_handler(function()
+        if maintain_enabled then local v = get_current_vehicle(); if v then apply_height(v, current_height) end end; return true
+    end)
+
+    util.toast("Air Suspension (Robusto) carregado ✅")
+end)
+
+if not ok then
+    if util and util.toast then util.toast("Erro ao carregar script Air Suspension (Robusto): " .. tostring(err))
+    else print("Erro ao carregar script Air Suspension (Robusto): " .. tostring(err)) end
+end
