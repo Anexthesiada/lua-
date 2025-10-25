@@ -1,0 +1,62 @@
+-- immortal_police.lua
+-- Torna policiais invencíveis (modo História / offline)
+
+
+util.require_natives(1681379138)
+
+menu.my_root():divider("Polícia Imortal (Modo História)")
+
+local cops_invincible = false
+local cops_list = {}
+
+local function is_cop(ped)
+    return PED.IS_PED_A_COP(ped)
+end
+
+local function make_cop_invincible(ped)
+    if ped and ped ~= 0 and ENTITY.DOES_ENTITY_EXIST(ped) then
+        ENTITY.SET_ENTITY_INVINCIBLE(ped, true)
+        PED.SET_PED_CAN_RAGDOLL(ped, false)
+        PED.SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(ped, true)
+    end
+end
+
+local function revert_cop(ped)
+    if ped and ped ~= 0 and ENTITY.DOES_ENTITY_EXIST(ped) then
+        ENTITY.SET_ENTITY_INVINCIBLE(ped, false)
+        PED.SET_PED_CAN_RAGDOLL(ped, true)
+        PED.SET_BLOCKING_OF_NON_TEMPORARY_EVENTS(ped, false)
+    end
+end
+
+local function process_cops()
+    local peds = entities.get_all_peds_as_handles()
+    for _, ped in ipairs(peds) do
+        if is_cop(ped) then
+            make_cop_invincible(ped)
+            cops_list[ped] = true
+        end
+    end
+end
+
+menu.my_root():toggle("Ativar Polícia Imortal", {}, "Torna policiais invencíveis enquanto ativo.", function(on)
+    cops_invincible = on
+    if not on then
+        for ped, _ in pairs(cops_list) do
+            revert_cop(ped)
+        end
+        cops_list = {}
+        util.toast("Polícia voltou ao normal.")
+    else
+        util.toast("Polícia imortal ativada.")
+    end
+end)
+
+util.create_tick_handler(function()
+    if cops_invincible then
+        process_cops()
+    end
+    return true
+end)
+
+util.toast("Script Polícia Imortal (Modo História)")
