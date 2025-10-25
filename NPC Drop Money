@@ -1,0 +1,93 @@
+-- money_drop_on_kill.lua
+-- Ao derrubar NPCs por jogador, cria um pickup de dinheiro no corpo (singleplayer only).
+
+-- Usa CREATE_AMBIENT_PICKUP para gerar pick-ups de dinheiro quando um NPC morre e o culpado for o jogador.
+
+util.require_natives(1681379138)
+
+menu.my_root():divider("Money Drop on Kill (Story Only)")
+
+local enabled = false
+local processed = {} -- peds já processados
+local drop_amount = 1000000 -- valor em dólares para spawn
+local pickup_name = "PICKUP_MONEY_VARIABLE" -- tipo de pickup (pode trocar)
+
+local function toast(msg) util.toast(msg) end
+
+menu.my_root():toggle("Ativar Money Drop", {}, "Quando ligado, NPCs mortos pelo jogador dropam dinheiro.", function(on)
+    enabled = on
+    if on then toast("Money Drop ATIVADO (Singleplayer only).") else toast("Money Drop DESATIVADO.") end
+end)
+
+menu.my_root():slider_int("Valor do drop ($)", 0, 50000000, drop_amount, 1000, function(val)
+    drop_amount = val
+end)
+
+menu.my_root():action("Limpar cache de peds processados", {}, "Limpa lista interna (útil se perder drops)", function()
+    processed = {}
+    toast("Cache limpo.")
+end)
+
+-- Cria o pickup de dinheiro na posição (x,y,z) com valor 'value'
+local function create_money_pickup_at(x,y,z, value)
+    local ok, err = pcall(function()
+        -- obter hash do tipo de pickup
+        local pickHash = GAMEPLAY.GET_HASH_KEY(pickup_name)
+        -- CREATE_AMBIENT_PICKUP(pickupHash, x, y, z, flags, value, modelHash, returnHandle, p8)
+        -- Os parâmetros exatos variam por wrapper; o usado abaixo é comum em muitos scripts:
+        OBJECT.CREATE_AMBIENT_PICKUP(pickHash, x, y, z, 0, math.floor(value), 0, false, true)
+    end)
+    if not ok then
+        util.toast("Erro ao criar pickup: " .. tostring(err))
+    end
+end
+
+-- Tick: detecta peds mortos recentemente e cria pickup se o culpado for o jogador
+util.create_tick_handler(function()
+    if not enabled then return true end
+
+    local peds = entities.get_all_peds_as_handles()
+    local user_ped = players.user_ped()
+    local user_veh = entities.get_user_vehicle_as_handle()
+
+    for _, ped in ipairs(peds) do
+        -- ignorar jogador e peds já processados
+        if ped ~= user_ped and not processed[ped] then
+            if ENTITY.IS_ENTITY_DEAD(ped) then
+                -- obter fonte da morte (quem matou)
+                local ok, killer = pcall(function() return PED.GET_PED_SOURCE_OF_DEATH(ped) end)
+                killer = killer or 0
+                -- se killer for o jogador, ou veículo do jogador, dar drop
+                local killed_by_player = false
+                if killer ~= 0 then
+                    if killer == user_ped then
+                        killed_by_player = true
+                    else
+                        -- se killer é veículo, verificar condutor
+                        if ENTITY.IS_ENTITY_A_VEHICLE(killer) then
+                            local driver = VEHICLE.GET_PED_IN_VEHICLE_SEAT(killer, -1)
+                            if driver == user_ped then killed_by_player = true end
+                        end
+                    end
+                end
+                if killed_by_player then
+                    local pos = ENTITY.GET_ENTITY_COORDS(ped, true)
+                    create_money_pickup_at(pos.x, pos.y, pos.z, drop_amount)
+                    processed[ped] = true
+                else
+                    -- marcar como processado para evitar re-checagens infinitas
+                    processed[ped] = true
+                end
+            end
+        end
+    end
+
+    -- limpar entradas inválidas na tabela processed (manutenção)
+    for k, _ in pairs(processed) do
+        if not ENTITY.DOES_ENTITY_EXIST(k) then processed[k] = nil end
+    end
+
+    return true
+end)
+
+toast("Money Drop on Kill  (singleplayer only).")
